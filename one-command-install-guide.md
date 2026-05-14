@@ -13,13 +13,13 @@
 假设你的脚本托管地址是：
 
 ```text
-https://raw.githubusercontent.com/你的用户名/你的仓库/main/deploy-newapi-sub2api.sh
+https://raw.githubusercontent.com/springkai66/newapi-sub2api-deploy/master/deploy-newapi-sub2api.sh
 ```
 
 用户在服务器上执行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/你的用户名/你的仓库/main/deploy-newapi-sub2api.sh -o /tmp/deploy-newapi-sub2api.sh \
+curl -fsSL https://raw.githubusercontent.com/springkai66/newapi-sub2api-deploy/master/deploy-newapi-sub2api.sh -o /tmp/deploy-newapi-sub2api.sh \
   && chmod +x /tmp/deploy-newapi-sub2api.sh \
   && sudo bash /tmp/deploy-newapi-sub2api.sh
 ```
@@ -27,7 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/你的用户名/你的仓库/main/d
 如果服务器默认就是 root 用户，也可以：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/你的用户名/你的仓库/main/deploy-newapi-sub2api.sh -o /tmp/deploy-newapi-sub2api.sh \
+curl -fsSL https://raw.githubusercontent.com/springkai66/newapi-sub2api-deploy/master/deploy-newapi-sub2api.sh -o /tmp/deploy-newapi-sub2api.sh \
   && chmod +x /tmp/deploy-newapi-sub2api.sh \
   && bash /tmp/deploy-newapi-sub2api.sh
 ```
@@ -99,19 +99,19 @@ deploy-newapi-sub2api.sh
 GitHub raw 地址一般是：
 
 ```text
-https://raw.githubusercontent.com/用户名/仓库名/main/deploy-newapi-sub2api.sh
+https://raw.githubusercontent.com/用户名/仓库名/master/deploy-newapi-sub2api.sh
 ```
 
 例如：
 
 ```text
-https://raw.githubusercontent.com/acme/newapi-sub2api-deploy/main/deploy-newapi-sub2api.sh
+https://raw.githubusercontent.com/springkai66/newapi-sub2api-deploy/master/deploy-newapi-sub2api.sh
 ```
 
 最终安装命令就是：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/acme/newapi-sub2api-deploy/main/deploy-newapi-sub2api.sh -o /tmp/deploy-newapi-sub2api.sh \
+curl -fsSL https://raw.githubusercontent.com/springkai66/newapi-sub2api-deploy/master/deploy-newapi-sub2api.sh -o /tmp/deploy-newapi-sub2api.sh \
   && chmod +x /tmp/deploy-newapi-sub2api.sh \
   && sudo bash /tmp/deploy-newapi-sub2api.sh
 ```
@@ -154,7 +154,7 @@ curl -fsSL https://install.example.com/newapi-sub2api.sh -o /tmp/deploy-newapi-s
 对用户更负责任的方式是两步：先下载，再查看，再执行。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/你的用户名/你的仓库/main/deploy-newapi-sub2api.sh -o deploy-newapi-sub2api.sh
+curl -fsSL https://raw.githubusercontent.com/springkai66/newapi-sub2api-deploy/master/deploy-newapi-sub2api.sh -o deploy-newapi-sub2api.sh
 less deploy-newapi-sub2api.sh
 sudo bash deploy-newapi-sub2api.sh
 ```
@@ -227,7 +227,7 @@ SHA256: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 在一台全新的 Ubuntu 22.04 / 24.04 服务器上执行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/你的用户名/你的仓库/main/deploy-newapi-sub2api.sh -o /tmp/deploy-newapi-sub2api.sh \
+curl -fsSL https://raw.githubusercontent.com/springkai66/newapi-sub2api-deploy/master/deploy-newapi-sub2api.sh -o /tmp/deploy-newapi-sub2api.sh \
   && chmod +x /tmp/deploy-newapi-sub2api.sh \
   && sudo bash /tmp/deploy-newapi-sub2api.sh
 ```
@@ -235,7 +235,7 @@ curl -fsSL https://raw.githubusercontent.com/你的用户名/你的仓库/main/d
 如果你是 root 用户：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/你的用户名/你的仓库/main/deploy-newapi-sub2api.sh -o /tmp/deploy-newapi-sub2api.sh \
+curl -fsSL https://raw.githubusercontent.com/springkai66/newapi-sub2api-deploy/master/deploy-newapi-sub2api.sh -o /tmp/deploy-newapi-sub2api.sh \
   && chmod +x /tmp/deploy-newapi-sub2api.sh \
   && bash /tmp/deploy-newapi-sub2api.sh
 ```
@@ -245,7 +245,7 @@ curl -fsSL https://raw.githubusercontent.com/你的用户名/你的仓库/main/d
 如果你想先检查脚本内容：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/你的用户名/你的仓库/main/deploy-newapi-sub2api.sh -o deploy-newapi-sub2api.sh
+curl -fsSL https://raw.githubusercontent.com/springkai66/newapi-sub2api-deploy/master/deploy-newapi-sub2api.sh -o deploy-newapi-sub2api.sh
 less deploy-newapi-sub2api.sh
 sudo bash deploy-newapi-sub2api.sh
 ```
@@ -258,7 +258,7 @@ sudo bash deploy-newapi-sub2api.sh
 不推荐，但可以改成下面这种形式：
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/你的用户名/你的仓库/main/deploy-newapi-sub2api.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/springkai66/newapi-sub2api-deploy/master/deploy-newapi-sub2api.sh)"
 ```
 
 这比 `curl | bash` 更适合交互脚本，因为脚本内容通过 `-c` 传给 bash，标准输入仍然可以保留给终端。
@@ -296,7 +296,7 @@ curl -o /tmp/deploy.sh URL && sudo bash /tmp/deploy.sh
 最终给用户的命令：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/你的用户名/你的仓库/main/deploy-newapi-sub2api.sh -o /tmp/deploy-newapi-sub2api.sh \
+curl -fsSL https://raw.githubusercontent.com/springkai66/newapi-sub2api-deploy/master/deploy-newapi-sub2api.sh -o /tmp/deploy-newapi-sub2api.sh \
   && chmod +x /tmp/deploy-newapi-sub2api.sh \
   && sudo bash /tmp/deploy-newapi-sub2api.sh
 ```

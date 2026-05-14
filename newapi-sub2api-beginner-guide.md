@@ -1,26 +1,24 @@
-# NewAPI + Sub2API 小白一键部署操作手册
+# NewAPI + Sub2API 小白一键部署手册
 
-> 目标：让你不需要再查资料，按顺序复制命令、填写域名和密码，就能把 NewAPI + Sub2API 中转站基础环境跑起来。
->
-> 你需要提前准备：
->
-> 1. 一台海外 VPS 服务器，例如 Ubuntu 22.04 / 24.04。
-> 2. 一个域名，例如 `example.com`。
-> 3. 你能登录域名解析后台。
-> 4. 你能通过 SSH 登录服务器。
-> 5. 合法可用的上游 API Key 或账号资源。没有上游资源，部署成功也无法真正调用模型。
+这份文档按“先下载一键部署脚本，再执行脚本”的方式写。你可以从上到下照着做，不需要先懂 Docker、Caddy、PostgreSQL、Redis。
+
+重要提醒：
+
+- 本项目只负责帮你部署 NewAPI + Sub2API 基础环境。
+- 你还需要自己准备合法的上游 API Key 或账号资源，否则部署成功也不能真正调用模型。
+- 不建议把个人订阅账号包装成公开商业中转服务。公开运营涉及上游服务条款、备案、实名、内容安全、日志留存、支付、税务和用户隐私等问题。
 
 ---
 
-## 0. 你最后会得到什么
+## 0. 最终会部署出什么
 
-部署完成后：
+部署完成后，你会有：
 
 ```text
 https://api.你的域名.com
 ```
 
-这是 NewAPI，对外给用户使用。
+这是 NewAPI，对外给用户、Claude Code、Codex、Cherry Studio、OpenAI SDK 使用。
 
 可选：
 
@@ -28,273 +26,66 @@ https://api.你的域名.com
 https://sub.你的域名.com
 ```
 
-这是 Sub2API 管理后台，只建议你自己访问，不建议公开给用户。
+这是 Sub2API 管理后台，用来配置上游账号池。建议只允许你自己的 IP 访问，不要公开给普通用户。
 
-架构是：
+整体链路：
 
 ```text
-用户客户端
+用户客户端 / Claude Code / Codex
   ↓
-NewAPI：发用户 key、计费、限流、日志
+NewAPI：用户 key、额度、计费、渠道、日志
   ↓
-Sub2API：管理上游账号池
+Sub2API：上游账号池、订阅额度、账号调度
   ↓
-OpenAI / Claude / Gemini / 其他合法上游
+OpenAI / Claude / Gemini / Azure / 其他合法上游
 ```
 
 ---
 
-## 1. 你需要准备的信息
+## 1. 开始前你需要准备
 
-先把下面这些信息填好，后面会反复用到。
+### 1.1 一台服务器
 
-### 1.1 服务器信息
+推荐：
 
 ```text
-服务器 IP：________________________
-服务器 SSH 用户名：root 或 ubuntu 或其他：________________________
-服务器 SSH 密码或密钥：自己保存好
+系统：Ubuntu 22.04 或 Ubuntu 24.04
+最低配置：2 核 CPU / 4GB 内存 / 40GB 硬盘
+推荐配置：4 核 CPU / 8GB 内存 / 80GB 硬盘
+地区：新加坡、日本、美国西海岸等网络稳定地区
 ```
 
-### 1.2 域名信息
+你需要知道：
 
-假设你的主域名是：
+```text
+服务器公网 IP：____________________
+SSH 用户名：root 或 ubuntu 或其他：____________________
+SSH 密码或密钥：自己保存好
+```
+
+### 1.2 一个域名
+
+例如你的主域名是：
 
 ```text
 example.com
 ```
 
-建议使用两个子域名：
+建议准备两个子域名：
 
 ```text
-api.example.com    给 NewAPI 使用，对外服务
-sub.example.com    给 Sub2API 后台使用，可选
+api.example.com    NewAPI 对外入口
+sub.example.com    Sub2API 后台，可选
 ```
 
-把你的实际域名写在这里：
+把你的实际域名写下来：
 
 ```text
-NewAPI 域名：________________________
-Sub2API 域名：________________________
+NewAPI 域名：____________________
+Sub2API 域名：____________________
 ```
 
-如果你不想公开 Sub2API 后台，Sub2API 域名也可以先不配置。
-
----
-
-## 2. 购买服务器后的第一步：登录服务器
-
-### 2.1 Windows 用户
-
-打开 PowerShell。
-
-如果你的服务器用户名是 root，IP 是 `1.2.3.4`，输入：
-
-```bash
-ssh root@1.2.3.4
-```
-
-如果用户名是 ubuntu：
-
-```bash
-ssh ubuntu@1.2.3.4
-```
-
-第一次连接会提示：
-
-```text
-Are you sure you want to continue connecting (yes/no/[fingerprint])?
-```
-
-输入：
-
-```text
-yes
-```
-
-然后输入服务器密码。
-
-### 2.2 macOS 用户
-
-打开 Terminal，命令同上：
-
-```bash
-ssh root@你的服务器IP
-```
-
-### 2.3 登录成功的样子
-
-你会看到类似：
-
-```text
-root@xxx:~#
-```
-
-或：
-
-```text
-ubuntu@xxx:~$
-```
-
-只要进入这个界面，说明已经登录服务器。
-
----
-
-## 3. 域名解析设置
-
-这一步在你的域名服务商后台操作，不是在服务器里操作。
-
-### 3.1 添加 NewAPI 域名解析
-
-进入域名 DNS 解析页面，添加一条记录：
-
-```text
-类型：A
-主机记录：api
-记录值：你的服务器 IP
-TTL：默认即可
-```
-
-例如你的域名是 `example.com`，服务器 IP 是 `1.2.3.4`：
-
-```text
-A    api    1.2.3.4
-```
-
-最终访问地址就是：
-
-```text
-api.example.com
-```
-
-### 3.2 添加 Sub2API 域名解析，可选
-
-如果你想通过网页访问 Sub2API 后台，添加：
-
-```text
-类型：A
-主机记录：sub
-记录值：你的服务器 IP
-TTL：默认即可
-```
-
-最终访问地址：
-
-```text
-sub.example.com
-```
-
-如果你不知道要不要暴露 Sub2API，建议先暴露，但部署脚本里选择“限制管理员 IP 访问”。
-
-### 3.3 检查解析是否生效
-
-在你自己的电脑终端执行：
-
-```bash
-ping api.example.com
-```
-
-把 `api.example.com` 改成你的实际域名。
-
-如果看到返回的 IP 是你的服务器 IP，说明生效。
-
-如果没有生效，等 5-30 分钟再试。
-
----
-
-## 4. 把一键部署脚本上传到服务器
-
-你本地已经有脚本：
-
-```text
-/home/kyle/test/AnythingElse/deploy-newapi-sub2api.sh
-```
-
-如果你是在当前这台机器上操作，可以直接复制脚本内容到服务器。
-
-### 4.1 方式 A：用 scp 上传，推荐
-
-在你本地电脑终端执行：
-
-```bash
-scp /home/kyle/test/AnythingElse/deploy-newapi-sub2api.sh root@你的服务器IP:/root/
-```
-
-如果你的服务器用户名不是 root，例如 ubuntu：
-
-```bash
-scp /home/kyle/test/AnythingElse/deploy-newapi-sub2api.sh ubuntu@你的服务器IP:/home/ubuntu/
-```
-
-### 4.2 方式 B：服务器里直接新建文件
-
-如果你不会 scp，可以登录服务器后执行：
-
-```bash
-nano deploy-newapi-sub2api.sh
-```
-
-然后把脚本内容粘贴进去。
-
-保存方式：
-
-```text
-Ctrl + O
-回车
-Ctrl + X
-```
-
----
-
-## 5. 执行一键部署脚本
-
-登录服务器后，进入脚本所在目录。
-
-如果你上传到了 root 目录：
-
-```bash
-cd /root
-```
-
-给脚本执行权限：
-
-```bash
-chmod +x deploy-newapi-sub2api.sh
-```
-
-执行脚本：
-
-```bash
-bash deploy-newapi-sub2api.sh
-```
-
-如果提示权限问题，执行：
-
-```bash
-sudo bash deploy-newapi-sub2api.sh
-```
-
----
-
-## 6. 脚本运行时怎么填写
-
-脚本会问你几个问题。下面逐个解释。
-
-### 6.1 输入 NewAPI 对外域名
-
-提示类似：
-
-```text
-请输入 NewAPI 对外域名，例如 api.example.com:
-```
-
-你输入你的域名，例如：
-
-```text
-api.example.com
-```
-
-不要带 `https://`，只填域名。
+注意：后面执行脚本时，只填域名，不要带 `https://`。
 
 正确：
 
@@ -308,7 +99,189 @@ api.example.com
 https://api.example.com
 ```
 
-### 6.2 是否暴露 Sub2API 管理后台
+---
+
+## 2. 设置域名解析
+
+这一步在你的域名服务商后台操作，不是在服务器里操作。
+
+### 2.1 添加 NewAPI 解析
+
+添加一条 A 记录：
+
+```text
+类型：A
+主机记录：api
+记录值：你的服务器公网 IP
+TTL：默认
+```
+
+例如：
+
+```text
+A    api    1.2.3.4
+```
+
+### 2.2 添加 Sub2API 解析，可选但推荐新手先加
+
+添加一条 A 记录：
+
+```text
+类型：A
+主机记录：sub
+记录值：你的服务器公网 IP
+TTL：默认
+```
+
+例如：
+
+```text
+A    sub    1.2.3.4
+```
+
+Sub2API 后台建议后面用脚本限制“只有你的公网 IP 能访问”。
+
+### 2.3 检查解析是否生效
+
+在你电脑的终端里执行：
+
+```bash
+ping api.example.com
+```
+
+把 `api.example.com` 换成你的真实域名。
+
+如果返回的 IP 是你的服务器 IP，就说明生效了。如果没生效，等 5-30 分钟再试。
+
+---
+
+## 3. 登录服务器
+
+Windows 用户打开 PowerShell；macOS 用户打开 Terminal。
+
+如果服务器用户名是 root：
+
+```bash
+ssh root@你的服务器IP
+```
+
+如果服务器用户名是 ubuntu：
+
+```bash
+ssh ubuntu@你的服务器IP
+```
+
+第一次连接会问：
+
+```text
+Are you sure you want to continue connecting?
+```
+
+输入：
+
+```text
+yes
+```
+
+登录成功后，你会看到类似：
+
+```text
+root@xxx:~#
+```
+
+或：
+
+```text
+ubuntu@xxx:~$
+```
+
+---
+
+## 4. 一键下载并执行部署脚本
+
+登录服务器后，复制下面整段命令执行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/springkai66/newapi-sub2api-deploy/master/deploy-newapi-sub2api.sh -o /tmp/deploy-newapi-sub2api.sh \
+  && chmod +x /tmp/deploy-newapi-sub2api.sh \
+  && sudo bash /tmp/deploy-newapi-sub2api.sh
+```
+
+如果你当前就是 root 用户，也可以执行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/springkai66/newapi-sub2api-deploy/master/deploy-newapi-sub2api.sh -o /tmp/deploy-newapi-sub2api.sh \
+  && chmod +x /tmp/deploy-newapi-sub2api.sh \
+  && bash /tmp/deploy-newapi-sub2api.sh
+```
+
+### 4.1 更安全的方式：先看脚本再执行
+
+如果你想先检查脚本内容：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/springkai66/newapi-sub2api-deploy/master/deploy-newapi-sub2api.sh -o deploy-newapi-sub2api.sh
+less deploy-newapi-sub2api.sh
+sudo bash deploy-newapi-sub2api.sh
+```
+
+root 用户：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/springkai66/newapi-sub2api-deploy/master/deploy-newapi-sub2api.sh -o deploy-newapi-sub2api.sh
+less deploy-newapi-sub2api.sh
+bash deploy-newapi-sub2api.sh
+```
+
+### 4.2 为什么不用 curl | bash
+
+不要用：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/springkai66/newapi-sub2api-deploy/master/deploy-newapi-sub2api.sh | bash
+```
+
+原因：这个部署脚本会问你域名、密码、管理员 IP 等问题，是交互式脚本。`curl | bash` 对交互输入不稳定。
+
+推荐方式就是先下载：
+
+```bash
+curl -o /tmp/deploy.sh URL
+```
+
+再执行：
+
+```bash
+bash /tmp/deploy.sh
+```
+
+---
+
+## 5. 脚本运行时每一步怎么填
+
+### 5.1 NewAPI 域名
+
+提示：
+
+```text
+请输入 NewAPI 对外域名，例如 api.example.com:
+```
+
+你填：
+
+```text
+api.你的域名.com
+```
+
+例如：
+
+```text
+api.example.com
+```
+
+不要带 `https://`。
+
+### 5.2 是否暴露 Sub2API 后台
 
 提示：
 
@@ -316,33 +289,35 @@ https://api.example.com
 是否暴露 Sub2API 管理后台域名？不建议公开暴露。[y/N]:
 ```
 
-小白建议输入：
+新手建议填：
 
 ```text
 y
 ```
 
-因为你需要网页后台配置上游账号。
+因为你后面需要进后台配置上游账号。
 
-但后面一定要选择“限制管理员 IP 访问”。
+### 5.3 Sub2API 域名
 
-### 6.3 输入 Sub2API 域名
-
-如果上一步输入了 `y`，会提示：
+提示：
 
 ```text
 请输入 Sub2API 管理后台域名，例如 sub.example.com:
 ```
 
-输入：
+你填：
+
+```text
+sub.你的域名.com
+```
+
+例如：
 
 ```text
 sub.example.com
 ```
 
-同样不要带 `https://`。
-
-### 6.4 是否限制管理员 IP
+### 5.4 是否限制 Sub2API 后台只允许你的 IP 访问
 
 提示：
 
@@ -350,23 +325,9 @@ sub.example.com
 是否限制 Sub2API 后台只允许一个管理员 IP 访问？[Y/n]:
 ```
 
-小白建议直接回车，表示使用默认 `Y`。
+新手建议直接回车，使用默认 `Y`。
 
-也可以输入：
-
-```text
-y
-```
-
-### 6.5 输入你的公网 IP
-
-脚本会提示：
-
-```text
-请输入允许访问 Sub2API 后台的管理员公网 IP:
-```
-
-你的公网 IP 可以这样查：
+### 5.5 管理员公网 IP 怎么查
 
 打开浏览器访问：
 
@@ -374,23 +335,23 @@ y
 https://ip.sb
 ```
 
-或者：
+或：
 
 ```text
 https://ifconfig.me
 ```
 
-看到的 IP 填进去，例如：
+页面显示的 IP 就是你的公网 IP。
+
+脚本提示时填进去：
 
 ```text
-8.8.8.8
+请输入允许访问 Sub2API 后台的管理员公网 IP:
 ```
 
-注意：
+注意：如果你家宽带公网 IP 经常变化，以后可能会访问不了 Sub2API 后台，需要修改 Caddyfile 里的 IP。
 
-如果你家宽带 IP 经常变化，后面可能会访问不了 Sub2API，需要重新改 Caddyfile。
-
-### 6.6 输入 Sub2API 管理员邮箱
+### 5.6 Sub2API 管理员邮箱
 
 提示：
 
@@ -401,70 +362,44 @@ https://ifconfig.me
 输入你的邮箱，例如：
 
 ```text
-admin@yourdomain.com
+admin@example.com
 ```
 
-### 6.7 输入 PostgreSQL 密码
+### 5.7 PostgreSQL / Redis / 管理员密码
 
-提示：
+脚本会问：
 
 ```text
 请输入 PostgreSQL 密码 [留空自动生成]:
-```
-
-小白建议直接回车，让脚本自动生成。
-
-### 6.8 输入 Redis 密码
-
-提示：
-
-```text
 请输入 Redis 密码 [留空自动生成]:
-```
-
-小白建议直接回车。
-
-### 6.9 输入 Sub2API 管理员密码
-
-提示：
-
-```text
 请输入 Sub2API 管理员密码 [留空自动生成]:
 ```
 
-你可以自己输入一个强密码。
+新手建议全部直接回车，让脚本自动生成。
 
-也可以直接回车自动生成。
-
-注意：
-
-脚本结束时会显示 Sub2API 管理员邮箱和密码。请复制保存。
+脚本结束时会显示 Sub2API 管理员邮箱和密码，请复制保存。
 
 ---
 
-## 7. 部署完成后怎么判断成功
+## 6. 脚本会安装和生成什么
 
-脚本结束后，会显示类似：
+脚本会安装 Docker，并在服务器创建：
 
 ```text
-部署脚本执行完成。
-NewAPI 地址：
-  https://api.example.com
-
-Sub2API：
-  https://sub.example.com
+/opt/ai-gateway
 ```
 
-### 7.1 查看容器状态
+里面有：
 
-执行：
-
-```bash
-cd /opt/ai-gateway
-docker compose ps
+```text
+/opt/ai-gateway/.env
+/opt/ai-gateway/docker-compose.yml
+/opt/ai-gateway/caddy/Caddyfile
+/opt/ai-gateway/initdb/01-init.sql
+/opt/ai-gateway/backup.sh
 ```
 
-你应该看到这些服务：
+会启动这些容器：
 
 ```text
 ai-caddy
@@ -474,145 +409,104 @@ ai-postgres
 ai-redis
 ```
 
-状态应该是：
+---
 
-```text
-Up
-```
+## 7. 部署完成后怎么确认成功
 
-如果某个不是 Up，看日志：
+执行：
 
 ```bash
-docker compose logs -f 服务名
+cd /opt/ai-gateway
+docker compose ps
 ```
 
-例如：
-
-```bash
-docker compose logs -f new-api
-```
-
-### 7.2 浏览器访问 NewAPI
-
-打开：
+你应该看到这些服务都是 `Up`：
 
 ```text
-https://api.example.com
+ai-caddy
+new-api
+sub2api
+ai-postgres
+ai-redis
 ```
 
-如果能打开页面，说明 NewAPI 起来了。
+然后浏览器打开：
 
-如果打不开，执行：
+```text
+https://api.你的域名.com
+```
+
+如果能打开 NewAPI 页面，说明基础部署成功。
+
+如果你暴露了 Sub2API 后台，也打开：
+
+```text
+https://sub.你的域名.com
+```
+
+如果打不开，查看日志：
 
 ```bash
 cd /opt/ai-gateway
 docker compose logs -f caddy
 ```
 
-常见原因：
+最常见原因：
 
 ```text
 DNS 没生效
 80/443 没开放
 域名填错
-Cloudflare SSL 模式错误
+服务器安全组没放行 80/443
 ```
 
 ---
 
-## 8. NewAPI 后台怎么操作
+## 8. 部署后必须手动完成的事情
 
-> 下面是人工操作，脚本不能替你做。
+脚本只能把系统跑起来，不能替你配置业务。
+
+### 8.1 初始化 NewAPI
 
 打开：
 
 ```text
-https://api.example.com
+https://api.你的域名.com
 ```
 
-### 8.1 创建或登录管理员
-
-根据页面提示创建管理员账号。
-
-完成后，先做这些：
+完成：
 
 ```text
+[ ] 创建或登录管理员账号
 [ ] 修改管理员密码
-[ ] 保存管理员账号密码
 [ ] 关闭开放注册
+[ ] 创建用户分组：default / vip / internal
+[ ] 创建测试用户
+[ ] 给测试用户创建 API Token
+[ ] 设置模型倍率和额度
 ```
 
-如果你找不到“开放注册”，通常在：
+测试用户 token 类似：
 
 ```text
-系统设置 / 站点设置 / 用户设置
+sk-newapi-user-xxxx
 ```
 
-不同版本 UI 名称可能略有变化。
+这是给 Claude Code、Codex、用户客户端使用的 key。
 
-### 8.2 创建分组
-
-建议创建：
-
-```text
-default
-vip
-internal
-```
-
-含义：
-
-```text
-default：普通用户
-vip：高额度用户
-internal：你自己测试用
-```
-
-### 8.3 创建测试用户
-
-创建一个用户，例如：
-
-```text
-test@example.com
-```
-
-分组选择：
-
-```text
-internal
-```
-
-### 8.4 创建用户 Token
-
-在 NewAPI 里给测试用户创建一个 Token。
-
-复制保存，格式类似：
-
-```text
-sk-xxxxxxxxxxxxxxxx
-```
-
-这个是给客户端使用的 key。
-
-不要把 Sub2API 的 key 给用户。
-
----
-
-## 9. Sub2API 后台怎么操作
+### 8.2 初始化 Sub2API
 
 打开：
 
 ```text
-https://sub.example.com
+https://sub.你的域名.com
 ```
-
-如果你设置了管理员 IP 限制，只有你的公网 IP 能打开。
 
 登录：
 
 ```text
-邮箱：脚本里填写的 SUB2API_ADMIN_EMAIL
-密码：脚本结束时显示的密码，或你自己填写的密码
+邮箱：脚本里填的 Sub2API 管理员邮箱
+密码：脚本结束时显示的密码，或你自己输入的密码
 ```
 
 如果忘了，可以在服务器查看：
@@ -621,330 +515,193 @@ https://sub.example.com
 sudo grep SUB2API_ADMIN /opt/ai-gateway/.env
 ```
 
-### 9.1 添加上游账号
-
-进入 Sub2API 后台，找到类似：
+进入后台后完成：
 
 ```text
-账号管理
-渠道管理
-上游账号
-Provider
-Account
+[ ] 添加合法上游 API Key 或 OAuth 账号资源
+[ ] 配置模型
+[ ] 创建一个专门给 NewAPI 使用的用户，例如 newapi-upstream
+[ ] 给这个用户创建 API Key
 ```
 
-不同版本叫法可能不同。
-
-你需要添加你合法拥有的上游资源，例如：
+Sub2API 给 NewAPI 的 key 类似：
 
 ```text
-OpenAI API Key
-Anthropic API Key
-Gemini API Key
-Azure OpenAI
-Claude Code / Codex / Gemini CLI OAuth 账号
+sk-sub2api-xxxx
 ```
 
-如果你还没有任何上游 key，这一步无法继续提供真实模型服务。
+这个 key 只填到 NewAPI 渠道里，不要发给最终用户。
 
-### 9.2 配置模型
+### 8.3 在 NewAPI 添加 Sub2API 渠道
 
-添加或确认模型名，例如：
-
-```text
-gpt-4.1
-gpt-4.1-mini
-codex-mini-latest
-claude-sonnet-4-5
-claude-opus-4-1
-gemini-2.5-pro
-gemini-2.5-flash
-```
-
-注意：
-
-实际模型名必须以上游和 Sub2API 支持为准。
-
-### 9.3 创建给 NewAPI 使用的专用 Key
-
-在 Sub2API 里创建一个用户，建议名字：
-
-```text
-newapi-upstream
-```
-
-给它创建一个 API Key，保存下来：
-
-```text
-sk-sub2api-xxxxxxxx
-```
-
-这个 key 后面填到 NewAPI 渠道里。
-
-不要给最终用户。
-
----
-
-## 10. 在 NewAPI 里添加 Sub2API 渠道
-
-回到 NewAPI 后台：
-
-```text
-https://api.example.com
-```
-
-找到：
+进入 NewAPI：
 
 ```text
 渠道管理 -> 添加渠道
 ```
 
-### 10.1 添加 OpenAI / Codex 渠道
-
-配置示例：
+OpenAI / Codex 渠道：
 
 ```text
-渠道类型：OpenAI 或 OpenAI Compatible
+渠道类型：OpenAI / OpenAI Compatible
 渠道名称：Sub2API-OpenAI
 Base URL：http://sub2api:8080
-API Key：刚才 Sub2API 里创建的 sk-sub2api-xxxx
-模型：gpt-4.1,gpt-4.1-mini,codex-mini-latest
+API Key：Sub2API 给 NewAPI 的专用 key
+模型：gpt-4.1,gpt-4.1-mini,codex-mini-latest 等
 分组：default,vip,internal
-权重：100
 状态：启用
 ```
 
-最容易填错的是 Base URL。
-
-这里不要填公网域名，优先填：
-
-```text
-http://sub2api:8080
-```
-
-因为 NewAPI 和 Sub2API 在同一个 Docker 网络里。
-
-### 10.2 添加 Claude / Claude Code 渠道
-
-再添加一个渠道：
+Claude / Claude Code 渠道：
 
 ```text
 渠道类型：Claude / Anthropic / Claude Messages
 渠道名称：Sub2API-Claude
 Base URL：http://sub2api:8080
-API Key：刚才 Sub2API 里创建的 sk-sub2api-xxxx
-模型：claude-sonnet-4-5,claude-opus-4-1
+API Key：Sub2API 给 NewAPI 的专用 key
+模型：claude-sonnet-4-5 等
 分组：default,vip,internal
-权重：100
 状态：启用
 ```
 
-如果你没有 Claude 上游账号，可以先不添加 Claude 渠道。
+注意：Base URL 推荐填 Docker 内网地址：
+
+```text
+http://sub2api:8080
+```
+
+不要优先填公网 `https://sub.你的域名.com`。
 
 ---
 
-## 11. 配置模型价格和额度
+## 9. 测试 NewAPI 是否能用
 
-NewAPI 后台里找到类似：
-
-```text
-模型倍率
-倍率设置
-计费设置
-```
-
-先不要复杂定价，小白建议：
-
-```text
-测试阶段：只给自己小额度
-不要开放充值
-不要开放注册
-不要公开售卖
-```
-
-先给测试用户一点额度，例如：
-
-```text
-1 元 / 5 元 / 10 元等值额度
-```
-
-目的是防止配置错了被刷爆。
-
----
-
-## 12. 第一次接口测试
-
-把下面命令里的内容替换掉：
+下面命令里的内容要替换：
 
 ```text
 api.example.com -> 你的 NewAPI 域名
 sk-newapi-user-xxxx -> NewAPI 给测试用户创建的 token
 ```
 
-### 12.1 测试 OpenAI 聊天
+### 9.1 测试 OpenAI Chat
 
 ```bash
-curl https://api.example.com/v1/chat/completions \
-  -H "Authorization: Bearer sk-newapi-user-xxxx" \
-  -H "Content-Type: application/json" \
-  -d '{
+curl https://api.example.com/v1/chat/completions   -H "Authorization: Bearer sk-newapi-user-xxxx"   -H "Content-Type: application/json"   -d '{
     "model": "gpt-4.1",
-    "messages": [
-      {"role": "user", "content": "say hi"}
-    ],
+    "messages": [{"role": "user", "content": "say hi"}],
     "stream": false
   }'
 ```
 
-成功时会返回一段 JSON，里面有模型回答。
+成功时会返回 JSON，里面有模型回答。
 
-如果报错：
-
-```text
-model not found：模型名没配对
-invalid token：NewAPI 用户 token 错了
-channel not found：NewAPI 渠道没启用或分组不匹配
-upstream error：Sub2API 或上游账号有问题
-```
-
-### 12.2 测试流式输出
+### 9.2 测试流式输出
 
 ```bash
-curl -N https://api.example.com/v1/chat/completions \
-  -H "Authorization: Bearer sk-newapi-user-xxxx" \
-  -H "Content-Type: application/json" \
-  -d '{
+curl -N https://api.example.com/v1/chat/completions   -H "Authorization: Bearer sk-newapi-user-xxxx"   -H "Content-Type: application/json"   -d '{
     "model": "gpt-4.1",
-    "messages": [
-      {"role": "user", "content": "从1数到10"}
-    ],
+    "messages": [{"role": "user", "content": "从1数到10"}],
     "stream": true
   }'
 ```
 
-成功时会陆续输出，不是等很久一次性输出。
+成功时会一段一段输出，而不是卡很久一次性返回。
 
-### 12.3 测试 Claude Messages
+### 9.3 测试 Claude Messages
 
-如果你配置了 Claude 渠道，执行：
+如果你配置了 Claude 渠道：
 
 ```bash
-curl https://api.example.com/v1/messages \
-  -H "x-api-key: sk-newapi-user-xxxx" \
-  -H "anthropic-version: 2023-06-01" \
-  -H "content-type: application/json" \
-  -d '{
+curl https://api.example.com/v1/messages   -H "x-api-key: sk-newapi-user-xxxx"   -H "anthropic-version: 2023-06-01"   -H "content-type: application/json"   -d '{
     "model": "claude-sonnet-4-5",
     "max_tokens": 100,
-    "messages": [
-      {"role": "user", "content": "say hi"}
-    ]
+    "messages": [{"role": "user", "content": "say hi"}]
   }'
 ```
 
 ---
 
-## 13. Claude Code 怎么接入
+## 10. Claude Code 怎么接入
 
-在你自己的电脑上执行：
+在你的电脑上执行：
 
 ```bash
 export ANTHROPIC_BASE_URL=https://api.example.com
 export ANTHROPIC_API_KEY=sk-newapi-user-xxxx
-```
 
-替换成你的实际域名和 NewAPI 用户 token。
-
-测试：
-
-```bash
 claude -p "用一句话介绍你自己" --max-turns 1
 ```
 
-如果你还没安装 Claude Code：
+替换：
 
-```bash
-npm install -g @anthropic-ai/claude-code
+```text
+api.example.com -> 你的 NewAPI 域名
+sk-newapi-user-xxxx -> NewAPI 给用户创建的 token
 ```
-
-如果没有 npm，需要先安装 Node.js。小白建议用官方 Node.js 安装包或服务器系统包，但这属于客户端环境，不是中转站部署本身。
 
 ---
 
-## 14. Codex 怎么接入
+## 11. Codex 怎么接入
 
-在你自己的电脑上执行：
+在你的电脑上执行：
 
 ```bash
 export OPENAI_BASE_URL=https://api.example.com/v1
 export OPENAI_API_KEY=sk-newapi-user-xxxx
-```
 
-测试：
-
-```bash
 codex exec "用一句话介绍你自己"
 ```
 
-如果还没安装 Codex：
-
-```bash
-npm install -g @openai/codex
-```
-
-注意：
-
-Codex 可能依赖 `/v1/responses`。如果普通 OpenAI 聊天能用但 Codex 不能用，要检查 NewAPI 和 Sub2API 是否支持 Responses API。
+如果普通 OpenAI Chat 能用但 Codex 不能用，重点检查 NewAPI / Sub2API 是否支持 `/v1/responses`。
 
 ---
 
-## 15. 日常运维命令
+## 12. Cloudflare 要不要用
 
-所有命令都在服务器执行。
+不必须。
 
-进入目录：
+新手建议：
+
+```text
+第一阶段：不要用 Cloudflare，直接 DNS 解析到服务器，先把服务跑通。
+第二阶段：稳定后再考虑 Cloudflare。
+```
+
+如果用 Cloudflare：
+
+```text
+SSL/TLS 选择 Full (strict)
+api 域名可以后续开橙色云
+sub 域名如果用 Caddy 限 IP，建议 DNS only
+关闭 Rocket Loader / Auto Minify 等网页优化功能
+开 Cloudflare 后必须重新测试流式、Claude Code、Codex
+```
+
+---
+
+## 13. 日常运维命令
+
+进入部署目录：
 
 ```bash
 cd /opt/ai-gateway
 ```
 
-查看服务状态：
+查看状态：
 
 ```bash
 docker compose ps
 ```
 
-查看 NewAPI 日志：
-
-```bash
-docker compose logs -f new-api
-```
-
-查看 Sub2API 日志：
-
-```bash
-docker compose logs -f sub2api
-```
-
-查看 Caddy 日志：
+查看日志：
 
 ```bash
 docker compose logs -f caddy
+docker compose logs -f new-api
+docker compose logs -f sub2api
 ```
 
-重启 NewAPI：
-
-```bash
-docker compose restart new-api
-```
-
-重启 Sub2API：
-
-```bash
-docker compose restart sub2api
-```
-
-全部重启：
+重启全部服务：
 
 ```bash
 docker compose restart
@@ -953,19 +710,8 @@ docker compose restart
 更新镜像：
 
 ```bash
-cd /opt/ai-gateway
 docker compose pull
 docker compose up -d
-```
-
----
-
-## 16. 备份怎么做
-
-脚本已经生成备份脚本：
-
-```text
-/opt/ai-gateway/backup.sh
 ```
 
 手动备份：
@@ -974,217 +720,35 @@ docker compose up -d
 bash /opt/ai-gateway/backup.sh
 ```
 
-查看备份文件：
-
-```bash
-ls -lh /opt/ai-gateway/backups
-```
-
 设置每天自动备份：
 
 ```bash
 crontab -e
 ```
 
-如果第一次打开，系统会让你选择编辑器。小白建议选 `nano`。
-
-添加一行：
+加入：
 
 ```cron
 0 3 * * * /bin/bash /opt/ai-gateway/backup.sh >> /opt/ai-gateway/backups/backup.log 2>&1
 ```
 
-保存：
-
-```text
-Ctrl + O
-回车
-Ctrl + X
-```
-
 ---
 
-## 17. 常见问题和解决办法
+## 14. 三种 key 不要搞混
 
-### 17.1 浏览器打不开 https://api.example.com
+### 14.1 上游真实 API Key
 
-按顺序检查：
+例如 OpenAI、Claude、Gemini 的 key。
 
-```bash
-ping api.example.com
-```
-
-如果 IP 不对，说明 DNS 没配好或没生效。
-
-查看 Caddy 日志：
-
-```bash
-cd /opt/ai-gateway
-docker compose logs -f caddy
-```
-
-检查服务器是否开放端口：
-
-```bash
-sudo ufw status
-```
-
-云服务器后台安全组也要放行：
-
-```text
-80/tcp
-443/tcp
-```
-
-### 17.2 NewAPI 页面能打开，但接口报 model not found
-
-原因通常是：
-
-```text
-NewAPI 渠道里模型名没填
-Sub2API 里模型名不同
-用户分组没有权限使用该模型
-```
-
-解决：
-
-```text
-[ ] 检查 NewAPI 渠道模型列表
-[ ] 检查 Sub2API 模型名称
-[ ] 检查测试用户分组
-[ ] 检查模型倍率是否配置
-```
-
-### 17.3 invalid token
-
-可能是：
-
-```text
-你用了 Sub2API key 去请求 NewAPI
-你复制错了 NewAPI 用户 token
-Header 写错
-```
-
-NewAPI 对外 OpenAI 接口用：
-
-```text
-Authorization: Bearer sk-newapi-user-xxxx
-```
-
-Claude Messages 接口用：
-
-```text
-x-api-key: sk-newapi-user-xxxx
-```
-
-### 17.4 Claude Code 卡住
-
-常见原因：
-
-```text
-Claude 渠道类型选错
-/v1/messages 不通
-流式响应被中断
-模型不支持工具调用
-上游账号额度不足或被限流
-```
-
-先测试：
-
-```bash
-curl https://api.example.com/v1/messages \
-  -H "x-api-key: sk-newapi-user-xxxx" \
-  -H "anthropic-version: 2023-06-01" \
-  -H "content-type: application/json" \
-  -d '{
-    "model": "claude-sonnet-4-5",
-    "max_tokens": 100,
-    "messages": [
-      {"role": "user", "content": "say hi"}
-    ]
-  }'
-```
-
-这个不通，Claude Code 一定不通。
-
-### 17.5 Codex 不能用
-
-先测试普通 OpenAI 接口：
-
-```bash
-curl https://api.example.com/v1/chat/completions \
-  -H "Authorization: Bearer sk-newapi-user-xxxx" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-4.1",
-    "messages": [{"role": "user", "content": "say hi"}]
-  }'
-```
-
-如果普通接口通，但 Codex 不通，可能是 Responses API 不兼容。
-
-测试：
-
-```bash
-curl https://api.example.com/v1/responses \
-  -H "Authorization: Bearer sk-newapi-user-xxxx" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-4.1",
-    "input": "say hi"
-  }'
-```
-
----
-
-## 18. 小白推荐上线顺序
-
-不要部署完就公开卖。
-
-建议：
-
-```text
-第 1 天：只自己测试
-第 2-3 天：给 3 个朋友测试
-第 4-7 天：给 10-30 个小范围用户测试
-稳定后：再考虑开放注册或售卖
-```
-
-必须观察：
-
-```text
-[ ] 请求成功率
-[ ] Claude Code 是否经常卡住
-[ ] Codex 是否能完成任务
-[ ] 用户是否经常报错
-[ ] 上游账号是否频繁 429
-[ ] 是否有扣费争议
-[ ] 每天真实成本是多少
-```
-
-如果成功率低于 97%，不要扩大。
-
----
-
-## 19. 你最容易搞混的三个 key
-
-### 19.1 上游真实 API Key
-
-例如 OpenAI / Claude / Gemini 的 key。
-
-放在哪里：
+放在：
 
 ```text
 Sub2API 后台
 ```
 
-给谁用：
+不要给用户。
 
-```text
-只给 Sub2API 用
-```
-
-### 19.2 Sub2API 给 NewAPI 的 key
+### 14.2 Sub2API 给 NewAPI 的 key
 
 格式类似：
 
@@ -1192,19 +756,15 @@ Sub2API 后台
 sk-sub2api-xxxx
 ```
 
-放在哪里：
+放在：
 
 ```text
-NewAPI 渠道配置里
+NewAPI 渠道配置
 ```
 
-给谁用：
+不要给用户。
 
-```text
-只给 NewAPI 用
-```
-
-### 19.3 NewAPI 给最终用户的 key
+### 14.3 NewAPI 给最终用户的 key
 
 格式类似：
 
@@ -1212,72 +772,146 @@ NewAPI 渠道配置里
 sk-newapi-user-xxxx
 ```
 
-放在哪里：
+放在：
 
 ```text
-用户客户端、Claude Code、Codex、Cherry Studio
+Claude Code / Codex / Cherry Studio / SDK
 ```
 
-给谁用：
-
-```text
-最终用户使用
-```
-
-千万不要把上游真实 key 或 Sub2API key 发给用户。
+这个才是用户使用的 key。
 
 ---
 
-## 20. 最终检查清单
+## 15. 常见问题
 
-按顺序打勾：
+### 15.1 页面打不开
+
+检查：
+
+```bash
+ping api.example.com
+cd /opt/ai-gateway
+docker compose ps
+docker compose logs -f caddy
+```
+
+常见原因：
 
 ```text
-[ ] 我能 SSH 登录服务器
+DNS 没生效
+服务器安全组没开放 80/443
+域名填错
+```
+
+### 15.2 model not found
+
+常见原因：
+
+```text
+NewAPI 渠道模型名没填
+Sub2API 模型名不一致
+用户分组没有模型权限
+模型倍率没配置
+```
+
+### 15.3 invalid token
+
+常见原因：
+
+```text
+把 Sub2API key 当成 NewAPI 用户 key 用了
+NewAPI 用户 token 复制错了
+Header 写错了
+```
+
+OpenAI 接口：
+
+```text
+Authorization: Bearer sk-newapi-user-xxxx
+```
+
+Claude Messages 接口：
+
+```text
+x-api-key: sk-newapi-user-xxxx
+```
+
+### 15.4 Claude Code 卡住
+
+先测试 `/v1/messages` curl。这个不通，Claude Code 一定不通。
+
+常见原因：
+
+```text
+Claude 渠道类型选错
+模型名不一致
+上游 Claude 账号不可用
+流式响应被中断
+```
+
+---
+
+## 16. 本仓库文件说明
+
+```text
+README.md                              当前小白部署手册
+deploy-newapi-sub2api.sh               一键部署脚本
+newapi-sub2api-beginner-guide.md       小白完整操作手册
+newapi-sub2api-manual-steps.md         部署后人工操作清单
+newapi-sub2api-relay-setup.md          完整技术方案和实操方案
+one-command-install-guide.md           一条命令安装发布说明
+```
+
+建议阅读顺序：
+
+```text
+1. README.md
+2. newapi-sub2api-beginner-guide.md
+3. newapi-sub2api-manual-steps.md
+4. newapi-sub2api-relay-setup.md
+```
+
+---
+
+## 17. 最终检查清单
+
+```text
+[ ] 已登录服务器
 [ ] api 子域名已解析到服务器 IP
 [ ] sub 子域名已解析到服务器 IP，若使用
-[ ] 脚本已成功执行
-[ ] docker compose ps 里所有容器都是 Up
-[ ] https://api.example.com 能打开
-[ ] https://sub.example.com 能打开，若使用
+[ ] 已执行一键部署命令
+[ ] docker compose ps 全部 Up
+[ ] https://api.你的域名.com 能打开
 [ ] NewAPI 管理员已创建
 [ ] NewAPI 已关闭开放注册
-[ ] NewAPI 已创建测试用户
 [ ] NewAPI 已创建测试用户 token
-[ ] Sub2API 管理员能登录
+[ ] https://sub.你的域名.com 能打开，若使用
 [ ] Sub2API 已添加上游账号
 [ ] Sub2API 已创建给 NewAPI 使用的 key
-[ ] NewAPI 已添加 OpenAI 渠道
-[ ] NewAPI 已添加 Claude 渠道，若使用 Claude
-[ ] OpenAI curl 测试通过
-[ ] Claude Messages curl 测试通过，若使用 Claude
+[ ] NewAPI 已添加 Sub2API OpenAI 渠道
+[ ] NewAPI 已添加 Sub2API Claude 渠道，若使用 Claude
+[ ] OpenAI Chat curl 测试通过
 [ ] 流式 curl 测试通过
-[ ] Claude Code 实机测试通过
-[ ] Codex 实机测试通过
+[ ] Claude Messages curl 测试通过，若使用 Claude
+[ ] Claude Code 实机测试通过，若使用 Claude Code
+[ ] Codex 实机测试通过，若使用 Codex
 [ ] backup.sh 手动备份成功
-[ ] crontab 自动备份已配置
-[ ] 防火墙只开放 22/80/443
 ```
 
 ---
 
-## 21. 如果你卡住了，该提供哪些信息方便排查
+## 18. 如果卡住了，请提供这些信息
 
 不要只说“不能用”。请提供：
 
 ```text
 1. 卡在哪一步
-2. 你访问的域名，不要发真实 key
-3. 报错截图或完整错误文本
-4. docker compose ps 输出
-5. 相关日志：
-   docker compose logs --tail=100 caddy
-   docker compose logs --tail=100 new-api
-   docker compose logs --tail=100 sub2api
-6. 你测试的 curl 命令，记得把 key 打码
+2. 完整报错文本或截图
+3. docker compose ps 输出
+4. 最近日志
 ```
 
-获取状态：
+获取日志：
 
 ```bash
 cd /opt/ai-gateway
@@ -1286,3 +920,5 @@ docker compose logs --tail=100 caddy
 docker compose logs --tail=100 new-api
 docker compose logs --tail=100 sub2api
 ```
+
+注意：发日志前请打码真实 API Key。
